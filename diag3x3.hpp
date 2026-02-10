@@ -43,21 +43,22 @@ inline constexpr double eps = std::numeric_limits<double>::epsilon();
 
 /// Calculates eigenvalues based on the trigonometric solution of A = pB + qI.
 ///
-/// The symmetric input matrix is stored in column-major order as
-/// a flat array of 9 elements: a[row + col*3], with row and col in [0, 2].
-inline void eigval3x3(const std::array<double, 9>& a, std::array<double, 3>& w)
+/// The symmetric input matrix is accessed as a[row][col],
+/// with row and col in [0, 2].
+inline void eigval3x3(const std::array<std::array<double, 3>, 3>& a,
+                      std::array<double, 3>& w)
 {
     double q, p, r;
 
-    r = a[3]*a[3] + a[6]*a[6] + a[7]*a[7];
-    q = (a[0] + a[4] + a[8]) / 3.0;
-    w[0] = a[0] - q;
-    w[1] = a[4] - q;
-    w[2] = a[8] - q;
+    r = a[0][1]*a[0][1] + a[0][2]*a[0][2] + a[1][2]*a[1][2];
+    q = (a[0][0] + a[1][1] + a[2][2]) / 3.0;
+    w[0] = a[0][0] - q;
+    w[1] = a[1][1] - q;
+    w[2] = a[2][2] - q;
     p = std::sqrt((w[0]*w[0] + w[1]*w[1] + w[2]*w[2] + 2*r) / 6.0);
-    r = (w[0] * (w[1]*w[2] - a[7]*a[7])
-       - a[3] * (a[3]*w[2] - a[7]*a[6])
-       + a[6] * (a[3]*a[7] - w[1]*a[6])) / (p*p*p) * 0.5;
+    r = (w[0] * (w[1]*w[2] - a[1][2]*a[1][2])
+       - a[0][1] * (a[0][1]*w[2] - a[1][2]*a[0][2])
+       + a[0][2] * (a[0][1]*a[1][2] - w[1]*a[0][2])) / (p*p*p) * 0.5;
 
     if (r <= -1.0) {
         r = 0.5 * twothirdpi;
@@ -75,58 +76,59 @@ inline void eigval3x3(const std::array<double, 9>& a, std::array<double, 3>& w)
 /// Calculates eigenvectors using an analytical method based on vector cross
 /// products.
 ///
-/// The symmetric input matrix is stored in column-major order as
-/// a flat array of 9 elements: a[row + col*3], with row and col in [0, 2].
+/// The symmetric input matrix is accessed as a[row][col],
+/// with row and col in [0, 2].
 /// The matrix a is destroyed during the computation.
 /// On exit, w contains the eigenvalues and the columns of q are the
-/// corresponding eigenvectors.
-inline void eigvec3x3(std::array<double, 9>& a, std::array<double, 3>& w,
-                      std::array<double, 9>& q)
+/// corresponding eigenvectors, accessed as q[row][col].
+inline void eigvec3x3(std::array<std::array<double, 3>, 3>& a,
+                      std::array<double, 3>& w,
+                      std::array<std::array<double, 3>, 3>& q)
 {
     double norm, n1, n2, n3, precon;
     int i;
 
-    w[0] = std::max(std::abs(a[0]), std::abs(a[3]));
-    w[1] = std::max(std::abs(a[6]), std::abs(a[4]));
-    w[2] = std::max(std::abs(a[7]), std::abs(a[8]));
+    w[0] = std::max(std::abs(a[0][0]), std::abs(a[0][1]));
+    w[1] = std::max(std::abs(a[0][2]), std::abs(a[1][1]));
+    w[2] = std::max(std::abs(a[1][2]), std::abs(a[2][2]));
     precon = std::max(w[0], std::max(w[1], w[2]));
 
     // null matrix
     if (precon < eps) {
         w = {0.0, 0.0, 0.0};
-        q = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+        q = {{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
         return;
     }
 
     norm = 1.0 / precon;
 
-    a[0] *= norm;
-    a[3] *= norm;
-    a[4] *= norm;
-    a[6] *= norm;
-    a[7] *= norm;
-    a[8] *= norm;
+    a[0][0] *= norm;
+    a[0][1] *= norm;
+    a[1][1] *= norm;
+    a[0][2] *= norm;
+    a[1][2] *= norm;
+    a[2][2] *= norm;
 
     // Calculate eigenvalues
     eigval3x3(a, w);
 
     // Compute first eigenvector
-    a[0] -= w[0];
-    a[4] -= w[0];
-    a[8] -= w[0];
+    a[0][0] -= w[0];
+    a[1][1] -= w[0];
+    a[2][2] -= w[0];
 
-    q[0] = a[3]*a[7] - a[6]*a[4];
-    q[1] = a[6]*a[3] - a[0]*a[7];
-    q[2] = a[0]*a[4] - a[3]*a[3];
-    q[3] = a[3]*a[8] - a[6]*a[7];
-    q[4] = a[6]*a[6] - a[0]*a[8];
-    q[5] = a[0]*a[7] - a[3]*a[6];
-    q[6] = a[4]*a[8] - a[7]*a[7];
-    q[7] = a[7]*a[6] - a[3]*a[8];
-    q[8] = a[3]*a[7] - a[4]*a[6];
-    n1 = q[0]*q[0] + q[1]*q[1] + q[2]*q[2];
-    n2 = q[3]*q[3] + q[4]*q[4] + q[5]*q[5];
-    n3 = q[6]*q[6] + q[7]*q[7] + q[8]*q[8];
+    q[0][0] = a[0][1]*a[1][2] - a[0][2]*a[1][1];
+    q[1][0] = a[0][2]*a[0][1] - a[0][0]*a[1][2];
+    q[2][0] = a[0][0]*a[1][1] - a[0][1]*a[0][1];
+    q[0][1] = a[0][1]*a[2][2] - a[0][2]*a[1][2];
+    q[1][1] = a[0][2]*a[0][2] - a[0][0]*a[2][2];
+    q[2][1] = a[0][0]*a[1][2] - a[0][1]*a[0][2];
+    q[0][2] = a[1][1]*a[2][2] - a[1][2]*a[1][2];
+    q[1][2] = a[1][2]*a[0][2] - a[0][1]*a[2][2];
+    q[2][2] = a[0][1]*a[1][2] - a[1][1]*a[0][2];
+    n1 = q[0][0]*q[0][0] + q[1][0]*q[1][0] + q[2][0]*q[2][0];
+    n2 = q[0][1]*q[0][1] + q[1][1]*q[1][1] + q[2][1]*q[2][1];
+    n3 = q[0][2]*q[0][2] + q[1][2]*q[1][2] + q[2][2]*q[2][2];
 
     norm = n1;
     i = 1;
@@ -140,58 +142,58 @@ inline void eigvec3x3(std::array<double, 9>& a, std::array<double, 3>& w,
 
     if (i == 1) {
         norm = std::sqrt(1.0 / n1);
-        q[0] *= norm;
-        q[1] *= norm;
-        q[2] *= norm;
+        q[0][0] *= norm;
+        q[1][0] *= norm;
+        q[2][0] *= norm;
     } else if (i == 2) {
         norm = std::sqrt(1.0 / n2);
-        q[0] = q[3] * norm;
-        q[1] = q[4] * norm;
-        q[2] = q[5] * norm;
+        q[0][0] = q[0][1] * norm;
+        q[1][0] = q[1][1] * norm;
+        q[2][0] = q[2][1] * norm;
     } else {
         norm = std::sqrt(1.0 / n3);
-        q[0] = q[6] * norm;
-        q[1] = q[7] * norm;
-        q[2] = q[8] * norm;
+        q[0][0] = q[0][2] * norm;
+        q[1][0] = q[1][2] * norm;
+        q[2][0] = q[2][2] * norm;
     }
 
     // Robustly compute a right-hand orthonormal set (ev1, u, v)
-    if (std::abs(q[0]) > std::abs(q[1])) {
-        norm = std::sqrt(1.0 / (q[0]*q[0] + q[2]*q[2]));
-        q[3] = -q[2] * norm;
-        q[4] = 0.0;
-        q[5] = +q[0] * norm;
+    if (std::abs(q[0][0]) > std::abs(q[1][0])) {
+        norm = std::sqrt(1.0 / (q[0][0]*q[0][0] + q[2][0]*q[2][0]));
+        q[0][1] = -q[2][0] * norm;
+        q[1][1] = 0.0;
+        q[2][1] = +q[0][0] * norm;
     } else {
-        norm = std::sqrt(1.0 / (q[1]*q[1] + q[2]*q[2]));
-        q[3] = 0.0;
-        q[4] = +q[2] * norm;
-        q[5] = -q[1] * norm;
+        norm = std::sqrt(1.0 / (q[1][0]*q[1][0] + q[2][0]*q[2][0]));
+        q[0][1] = 0.0;
+        q[1][1] = +q[2][0] * norm;
+        q[2][1] = -q[1][0] * norm;
     }
-    q[6] = q[1]*q[5] - q[2]*q[4];
-    q[7] = q[2]*q[3] - q[0]*q[5];
-    q[8] = q[0]*q[4] - q[1]*q[3];
+    q[0][2] = q[1][0]*q[2][1] - q[2][0]*q[1][1];
+    q[1][2] = q[2][0]*q[0][1] - q[0][0]*q[2][1];
+    q[2][2] = q[0][0]*q[1][1] - q[1][0]*q[0][1];
 
     // Reset A
-    a[0] += w[0];
-    a[4] += w[0];
-    a[8] += w[0];
+    a[0][0] += w[0];
+    a[1][1] += w[0];
+    a[2][2] += w[0];
 
     // A*U
-    n1 = a[0]*q[3] + a[3]*q[4] + a[6]*q[5];
-    n2 = a[3]*q[3] + a[4]*q[4] + a[7]*q[5];
-    n3 = a[6]*q[3] + a[7]*q[4] + a[8]*q[5];
+    n1 = a[0][0]*q[0][1] + a[0][1]*q[1][1] + a[0][2]*q[2][1];
+    n2 = a[0][1]*q[0][1] + a[1][1]*q[1][1] + a[1][2]*q[2][1];
+    n3 = a[0][2]*q[0][1] + a[1][2]*q[1][1] + a[2][2]*q[2][1];
 
     // A*V, note out of order computation
-    a[8] = a[6]*q[6] + a[7]*q[7] + a[8]*q[8];
-    a[6] = a[0]*q[6] + a[3]*q[7] + a[6]*q[8];
-    a[7] = a[3]*q[6] + a[4]*q[7] + a[7]*q[8];
+    a[2][2] = a[0][2]*q[0][2] + a[1][2]*q[1][2] + a[2][2]*q[2][2];
+    a[0][2] = a[0][0]*q[0][2] + a[0][1]*q[1][2] + a[0][2]*q[2][2];
+    a[1][2] = a[0][1]*q[0][2] + a[1][1]*q[1][2] + a[1][2]*q[2][2];
 
     // UT*(A*U) - l2*E
-    n1 = q[3]*n1 + q[4]*n2 + q[5]*n3 - w[1];
+    n1 = q[0][1]*n1 + q[1][1]*n2 + q[2][1]*n3 - w[1];
     // UT*(A*V)
-    n2 = q[3]*a[6] + q[4]*a[7] + q[5]*a[8];
+    n2 = q[0][1]*a[0][2] + q[1][1]*a[1][2] + q[2][1]*a[2][2];
     // VT*(A*V) - l2*E
-    n3 = q[6]*a[6] + q[7]*a[7] + q[8]*a[8] - w[1];
+    n3 = q[0][2]*a[0][2] + q[1][2]*a[1][2] + q[2][2]*a[2][2] - w[1];
 
     if (std::abs(n1) >= std::abs(n3)) {
         norm = std::max(std::abs(n1), std::abs(n2));
@@ -205,9 +207,9 @@ inline void eigvec3x3(std::array<double, 9>& a, std::array<double, 3>& w,
                 n2 = std::sqrt(1.0 / (1.0 + n1*n1));
                 n1 = n1 * n2;
             }
-            q[3] = n2*q[3] - n1*q[6];
-            q[4] = n2*q[4] - n1*q[7];
-            q[5] = n2*q[5] - n1*q[8];
+            q[0][1] = n2*q[0][1] - n1*q[0][2];
+            q[1][1] = n2*q[1][1] - n1*q[1][2];
+            q[2][1] = n2*q[2][1] - n1*q[2][2];
         }
     } else {
         norm = std::max(std::abs(n3), std::abs(n2));
@@ -221,16 +223,16 @@ inline void eigvec3x3(std::array<double, 9>& a, std::array<double, 3>& w,
                 n2 = std::sqrt(1.0 / (1.0 + n3*n3));
                 n3 = n3 * n2;
             }
-            q[3] = n3*q[3] - n2*q[6];
-            q[4] = n3*q[4] - n2*q[7];
-            q[5] = n3*q[5] - n2*q[8];
+            q[0][1] = n3*q[0][1] - n2*q[0][2];
+            q[1][1] = n3*q[1][1] - n2*q[1][2];
+            q[2][1] = n3*q[2][1] - n2*q[2][2];
         }
     }
 
     // Calculate third eigenvector from cross product
-    q[6] = q[1]*q[5] - q[2]*q[4];
-    q[7] = q[2]*q[3] - q[0]*q[5];
-    q[8] = q[0]*q[4] - q[1]*q[3];
+    q[0][2] = q[1][0]*q[2][1] - q[2][0]*q[1][1];
+    q[1][2] = q[2][0]*q[0][1] - q[0][0]*q[2][1];
+    q[2][2] = q[0][0]*q[1][1] - q[1][0]*q[0][1];
 
     w[0] *= precon;
     w[1] *= precon;
